@@ -1,0 +1,56 @@
+---
+interface Props {
+  currentLang: 'en' | 'es';
+  translationSlug?: string;
+}
+
+const { currentLang, translationSlug } = Astro.props;
+
+const enHref = translationSlug ? `/en/${translationSlug}/` : '/en/';
+const esHref = translationSlug ? `/es/${translationSlug}/` : '/es/';
+---
+
+<nav class="lang-switcher flex items-center gap-1.5 text-sm" aria-label="Language switcher">
+  {/* Globe icon */}
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="16"
+    height="16"
+    viewBox="0 0 256 256"
+    fill="currentColor"
+    class="text-text-secondary"
+    aria-hidden="true"
+  >
+    <path d="M128,24A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm87.63,96H175.8c-1.54-28.08-11.09-54.56-27.37-76.47A88.18,88.18,0,0,1,215.63,120ZM96.23,136h63.54c-1.68,27.43-11.89,53-29.77,73.88C112.12,189,101.91,163.43,96.23,136Zm0-16c5.68-27.43,15.89-53,33.77-73.88C147.88,67,158.09,92.57,163.77,120ZM107.57,43.53C91.29,65.44,81.74,91.92,80.2,120H40.37A88.18,88.18,0,0,1,107.57,43.53ZM40.37,136H80.2c1.54,28.08,11.09,54.56,27.37,76.47A88.18,88.18,0,0,1,40.37,136Zm108.06,76.47c16.28-21.91,25.83-48.39,27.37-76.47h39.83A88.18,88.18,0,0,1,148.43,212.47Z" />
+  </svg>
+
+  <span
+    class:list={[
+      'transition-colors',
+      currentLang === 'en' ? 'font-semibold text-starlight' : 'text-text-secondary hover:text-event-horizon',
+    ]}
+    aria-current={currentLang === 'en' ? 'true' : undefined}
+  >
+    {currentLang === 'en' ? (
+      <span>EN</span>
+    ) : (
+      <a href={enHref}>EN</a>
+    )}
+  </span>
+
+  <span class="text-text-tertiary">/</span>
+
+  <span
+    class:list={[
+      'transition-colors',
+      currentLang === 'es' ? 'font-semibold text-starlight' : 'text-text-secondary hover:text-event-horizon',
+    ]}
+    aria-current={currentLang === 'es' ? 'true' : undefined}
+  >
+    {currentLang === 'es' ? (
+      <span>ES</span>
+    ) : (
+      <a href={esHref}>ES</a>
+    )}
+  </span>
+</nav>

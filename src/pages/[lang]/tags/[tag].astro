@@ -1,0 +1,119 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import BlogCard from '../../../components/BlogCard.astro';
+import { languages, useTranslation } from '../../../i18n/ui';
+import readingTime from 'reading-time';
+
+export async function getStaticPaths() {
+  const langs = Object.keys(languages) as Array<'en' | 'es'>;
+  const paths = [];
+
+  for (const lang of langs) {
+    const posts = await getCollection('blog', ({ data }) => {
+      return data.lang === lang && !data.draft;
+    });
+
+    const tags = [...new Set(posts.flatMap((post) => post.data.tags))];
+
+    for (const tag of tags) {
+      const filteredPosts = posts
+        .filter((post) => post.data.tags.includes(tag))
+        .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+
+      paths.push({
+        params: { lang, tag },
+        props: { posts: filteredPosts, tag },
+      });
+    }
+  }
+
+  return paths;
+}
+
+interface Props {
+  posts: Awaited<ReturnType<typeof getCollection>>;
+  tag: string;
+}
+
+const lang = Astro.params.lang as 'en' | 'es';
+const t = useTranslation(lang);
+const otherLang = lang === 'en' ? 'es' : 'en';
+const switchLabel = lang === 'en' ? t('common.switchToEs') : t('common.switchToEn');
+const { posts, tag } = Astro.props;
+---
+
+<BaseLayout
+  title={`${t('tags.postsTagged')} "${tag}"`}
+  description={`${t('tags.postsTagged')} "${tag}" - ${lang === 'es' ? 'Blog de Ivan Galaviz' : 'Ivan Galaviz Blog'}`}
+  lang={lang}
+>
+  <div class="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
+    {/* Navigation */}
+    <nav class="mb-10 flex items-center justify-between text-sm">
+      <a
+        href={`/${lang}/`}
+        class="text-text-secondary transition-colors hover:text-starlight"
+      >
+        &larr; {t('nav.blog')}
+      </a>
+      <div class="flex items-center gap-4">
+        <a
+          href={`/${otherLang}/`}
+          class="text-text-secondary transition-colors hover:text-starlight"
+          title={switchLabel}
+        >
+          {otherLang.toUpperCase()}
+        </a>
+        <a
+          href="https://www.ivanovishado.dev"
+          class="text-text-secondary transition-colors hover:text-event-horizon"
+          rel="noopener"
+        >
+          {t('nav.backToPortfolio')}
+        </a>
+      </div>
+    </nav>
+
+    {/* Tag header */}
+    <header class="mb-10">
+      <h1 class="font-heading text-2xl font-bold text-starlight">
+        {t('tags.postsTagged')} <span class="text-event-horizon">"{tag}"</span>
+      </h1>
+      <p class="mt-2 text-sm text-text-secondary">
+        {posts.length} {posts.length === 1 ? 'post' : 'posts'}
+      </p>
+    </header>
+
+    {/* Post list */}
+    <ul class="flex flex-col gap-10">
+      {posts.map((post) => {
+        const slug = post.id.replace(/^(en|es)\//, '');
+        const stats = readingTime(post.body ?? '');
+        return (
+          <li>
+            <BlogCard
+              title={post.data.title}
+              description={post.data.description}
+              pubDate={post.data.pubDate}
+              tags={post.data.tags}
+              slug={slug}
+              lang={lang}
+              readingTime={stats.text}
+            />
+          </li>
+        );
+      })}
+    </ul>
+
+    {/* Back link */}
+    <footer class="mt-16 border-t border-border pt-8">
+      <a
+        href={`/${lang}/`}
+        class="text-sm text-text-secondary transition-colors hover:text-event-horizon"
+      >
+        &larr; {t('blog.allPosts')}
+      </a>
+    </footer>
+  </div>
+</BaseLayout>

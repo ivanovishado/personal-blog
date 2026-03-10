@@ -1,0 +1,202 @@
+---
+title: "Building Event-Driven Systems: Lessons from the Trenches"
+description: "A practical guide to designing event-driven architectures that scale, with real-world patterns for event sourcing, CQRS, and eventual consistency."
+pubDate: 2026-03-10
+authors: ["Ivan Galaviz", "Claude Opus 4.6"]
+tags: ["event-driven", "architecture", "distributed-systems"]
+lang: en
+translationSlug: "construyendo-sistemas-event-driven"
+draft: false
+tldr: "Event-driven systems decouple producers from consumers, enabling independent scaling. Start with pub/sub, add event sourcing for audit trails, and embrace eventual consistency instead of fighting it."
+---
+
+Most distributed systems fail not because of bad algorithms, but because of tight coupling between services that were supposed to be independent. Event-driven architecture addresses this at the structural level: services communicate through events rather than direct calls, which means each service can evolve, scale, and fail independently. After building event-driven systems across fintech, logistics, and e-commerce domains, I have found that the gap between theory and production is where most teams struggle.
+
+This post covers the patterns that actually work, the traps that look like good ideas, and the mental models that make eventual consistency feel natural instead of terrifying.
+
+## Why Events Beat Request-Response at Scale
+
+A 2024 survey by the Cloud Native Computing Foundation found that 78% of organizations running more than 50 microservices adopted some form of event-driven communication. The reason is straightforward: request-response creates invisible runtime dependencies. When Service A calls Service B synchronously, A cannot function if B is down. Multiply this across dozens of services and you get cascading failures that take down entire platforms on a Saturday night.
+
+Events invert this relationship. A producer emits a fact about something that happened -- "order was placed," "payment was captured," "inventory was reserved" -- and walks away. Any number of consumers can react to that event on their own schedule.
+
+Here is a minimal event producer using TypeScript and a message broker abstraction:
+
+```typescript
+interface DomainEvent<T = unknown> {
+  id: string;
+  type: string;
+  occurredAt: Date;
+  aggregateId: string;
+  payload: T;
+}
+
+interface OrderPlacedPayload {
+  orderId: string;
+  customerId: string;
+  items: Array<{ sku: string; quantity: number; price: number }>;
+  total: number;
+}
+
+async function placeOrder(
+  command: PlaceOrderCommand,
+  broker: EventBroker,
+): Promise<Order> {
+  const order = Order.create(command);
+
+  const event: DomainEvent<OrderPlacedPayload> = {
+    id: crypto.randomUUID(),
+    type: 'order.placed',
+    occurredAt: new Date(),
+    aggregateId: order.id,
+    payload: {
+      orderId: order.id,
+      customerId: command.customerId,
+      items: command.items,
+      total: order.total,
+    },
+  };
+
+  await broker.publish('orders', event);
+  return order;
+}
+```
+
+The key insight: the `placeOrder` function does not know or care who consumes the event. The payment service, the inventory service, and the notification service all subscribe independently. Adding a new analytics consumer requires zero changes to the order service.
+
+## Event Sourcing: When You Need the Full Story
+
+Event sourcing takes the event-driven idea further: instead of storing only the current state of an entity, you store every event that led to that state. This gives you a complete audit trail, the ability to reconstruct state at any point in time, and the option to build new read models from historical data.
+
+The tradeoff is real. Event-sourced systems require more storage, more careful event schema design, and a different approach to querying. You cannot just `SELECT * FROM orders WHERE status = 'shipped'` -- you need a projected read model.
+
+Here is a simplified event store and projection pattern:
+
+```typescript
+interface EventStore {
+  append(streamId: string, events: DomainEvent[]): Promise<void>;
+  read(streamId: string, fromVersion?: number): Promise<DomainEvent[]>;
+}
+
+// Rebuild an order's current state from its event stream
+function rebuildOrder(events: DomainEvent[]): OrderState {
+  return events.reduce<OrderState>((state, event) => {
+    switch (event.type) {
+      case 'order.placed':
+        return {
+          ...state,
+          id: event.payload.orderId,
+          status: 'placed',
+          items: event.payload.items,
+          total: event.payload.total,
+        };
+      case 'order.confirmed':
+        return { ...state, status: 'confirmed' };
+      case 'order.shipped':
+        return {
+          ...state,
+          status: 'shipped',
+          trackingNumber: event.payload.trackingNumber,
+        };
+      case 'order.cancelled':
+        return { ...state, status: 'cancelled', reason: event.payload.reason };
+      default:
+        return state;
+    }
+  }, {} as OrderState);
+}
+```
+
+This pattern shines in domains where "what happened and when" matters as much as "what is the current state." Financial transactions, compliance-heavy workflows, and collaborative editing are natural fits. A CRUD app with simple state transitions probably does not need it -- and adding it prematurely will slow your team down.
+
+## CQRS: Separating Reads from Writes
+
+Command Query Responsibility Segregation (CQRS) pairs naturally with event sourcing. The write side handles commands and produces events. The read side subscribes to those events and maintains optimized query models. Each side can use the data model and storage engine that fits best.
+
+In practice, this means your write model might be an event stream in Kafka or EventStoreDB, while your read model lives in PostgreSQL with denormalized tables tuned for the exact queries your UI needs.
+
+```typescript
+// Write side: handle a command, produce events
+async function handleShipOrder(
+  command: ShipOrderCommand,
+  eventStore: EventStore,
+): Promise<void> {
+  const events = await eventStore.read(command.orderId);
+  const order = rebuildOrder(events);
+
+  if (order.status !== 'confirmed') {
+    throw new Error(`Cannot ship order in "${order.status}" status`);
+  }
+
+  await eventStore.append(command.orderId, [
+    {
+      id: crypto.randomUUID(),
+      type: 'order.shipped',
+      occurredAt: new Date(),
+      aggregateId: command.orderId,
+      payload: { trackingNumber: command.trackingNumber },
+    },
+  ]);
+}
+
+// Read side: project events into a queryable model
+async function projectOrderShipped(
+  event: DomainEvent,
+  db: Database,
+): Promise<void> {
+  await db.query(
+    `UPDATE order_read_model
+     SET status = 'shipped',
+         tracking_number = $1,
+         updated_at = $2
+     WHERE order_id = $3`,
+    [event.payload.trackingNumber, event.occurredAt, event.aggregateId],
+  );
+}
+```
+
+The critical thing teams get wrong with CQRS is applying it everywhere. If your service has simple CRUD operations with no complex query patterns, a shared model is fine. CQRS adds operational complexity -- two data stores to monitor, eventual consistency between them, and projection lag to account for in the UI. Use it where the read and write patterns genuinely diverge.
+
+## Embracing Eventual Consistency
+
+The hardest part of event-driven systems is not the code -- it is the mental shift. In a synchronous world, when you save data and then read it back, you expect to see your changes. In an event-driven world, there is a window where the write has happened but the read model has not caught up.
+
+Three strategies that make this manageable:
+
+1. **Optimistic UI updates.** After a user action, update the UI immediately with the expected result while the event propagates in the background. If the operation fails, roll back the UI state.
+
+2. **Causal consistency where it matters.** Use version numbers or vector clocks on critical paths. When the user who just placed an order views their order history, route that specific query to a store guaranteed to include their latest event.
+
+3. **Idempotent consumers.** Events will be delivered more than once. Design every consumer to handle duplicates gracefully. Store the event ID and skip processing if you have seen it before:
+
+```typescript
+async function handleEvent(
+  event: DomainEvent,
+  db: Database,
+): Promise<void> {
+  const processed = await db.query(
+    'SELECT 1 FROM processed_events WHERE event_id = $1',
+    [event.id],
+  );
+
+  if (processed.rows.length > 0) {
+    return; // Already handled, skip
+  }
+
+  await db.transaction(async (tx) => {
+    await processBusinessLogic(event, tx);
+    await tx.query(
+      'INSERT INTO processed_events (event_id, processed_at) VALUES ($1, $2)',
+      [event.id, new Date()],
+    );
+  });
+}
+```
+
+## Where to Start
+
+If you are considering event-driven architecture, start small. Pick one boundary in your system where two services are tightly coupled through synchronous calls. Replace that integration point with an event: the producing service emits an event, and the consuming service subscribes.
+
+You will immediately notice three things: deploys become independent, partial failures stop cascading, and adding new consumers becomes trivial. Once you have felt those benefits firsthand, the path to event sourcing and CQRS -- if and when you need them -- becomes much clearer.
+
+The goal is not to build the most sophisticated event-driven system possible. The goal is to build a system where components can change independently, fail gracefully, and scale on their own terms. Events are the mechanism. Loose coupling is the point.

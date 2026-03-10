@@ -1,0 +1,70 @@
+---
+/*
+ * ThemeToggle — Two-state toggle: Dark ↔ Light.
+ * Shows sun in dark mode (click for light), moon in light mode (click for dark).
+ */
+---
+
+<button
+  id="theme-toggle"
+  type="button"
+  class="p-2 rounded-lg hover:bg-surface-700 transition-colors"
+  aria-label="Toggle theme"
+>
+  {/* Sun icon — visible in dark mode (click to switch to light) */}
+  <svg
+    class="theme-icon icon-sun"
+    xmlns="http://www.w3.org/2000/svg"
+    width="20"
+    height="20"
+    viewBox="0 0 256 256"
+    fill="currentColor"
+  >
+    <path d="M128,60a68,68,0,1,0,68,68A68.07,68.07,0,0,0,128,60Zm0,120a52,52,0,1,1,52-52A52.06,52.06,0,0,1,128,180ZM120,36V16a8,8,0,0,1,16,0V36a8,8,0,0,1-16,0Zm80.49,48.49a8,8,0,0,1,0-11.31l14.14-14.14a8,8,0,0,1,11.31,11.31L211.8,84.49a8,8,0,0,1-11.31,0ZM240,120H220a8,8,0,0,1,0,16h20a8,8,0,0,1,0-16Zm-44.2,51.51a8,8,0,0,1,11.31,0l14.14,14.14a8,8,0,0,1-11.31,11.31L195.8,182.82a8,8,0,0,1,0-11.31ZM136,220v20a8,8,0,0,1-16,0V220a8,8,0,0,1,16,0ZM75.51,171.51a8,8,0,0,1,0,11.31L61.37,196.96a8,8,0,0,1-11.31-11.31l14.14-14.14a8,8,0,0,1,11.31,0ZM36,136H16a8,8,0,0,1,0-16H36a8,8,0,0,1,0,16ZM60.2,84.49a8,8,0,0,1-11.31,0L34.75,70.35A8,8,0,0,1,46.06,59.04L60.2,73.18a8,8,0,0,1,0,11.31Z" />
+  </svg>
+
+  {/* Moon icon — visible in light mode (click to switch to dark) */}
+  <svg
+    class="theme-icon icon-moon"
+    xmlns="http://www.w3.org/2000/svg"
+    width="20"
+    height="20"
+    viewBox="0 0 256 256"
+    fill="currentColor"
+  >
+    <path d="M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.36A88,88,0,0,1,65.64,67.09,89,89,0,0,1,98,41.64a104.11,104.11,0,0,0,116.36,116.36A89,89,0,0,1,188.9,190.36Z" />
+  </svg>
+</button>
+
+<style>
+  .theme-icon {
+    display: none;
+    transition: transform 200ms ease, opacity 200ms ease;
+  }
+
+  /* Dark mode: show sun icon */
+  :global(:root.dark) .icon-sun { display: block; }
+
+  /* Light mode: show moon icon */
+  :global(:root:not(.dark)) .icon-moon { display: block; }
+</style>
+
+<script>
+  let themeToggleController: AbortController | null = null;
+
+  function initThemeToggle() {
+    themeToggleController?.abort();
+    themeToggleController = new AbortController();
+
+    const btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    }, { signal: themeToggleController.signal });
+  }
+
+  initThemeToggle();
+  document.addEventListener('astro:after-swap', initThemeToggle);
+</script>

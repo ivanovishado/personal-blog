@@ -1,0 +1,86 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import BlogCard from '../../components/BlogCard.astro';
+import { languages, useTranslation } from '../../i18n/ui';
+import readingTime from 'reading-time';
+
+const localeMap = { en: 'en-US', es: 'es-MX' } as const;
+
+export function getStaticPaths() {
+  return Object.keys(languages).map((lang) => ({ params: { lang } }));
+}
+
+const lang = Astro.params.lang as 'en' | 'es';
+const t = useTranslation(lang);
+const otherLang = lang === 'en' ? 'es' : 'en';
+const switchLabel = lang === 'en' ? t('common.switchToEs') : t('common.switchToEn');
+
+const posts = (
+  await getCollection('blog', ({ data }) => {
+    return data.lang === lang && !data.draft;
+  })
+).sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+---
+
+<BaseLayout
+  title={t('blog.title')}
+  description={t('blog.description')}
+  lang={lang}
+>
+  <div class="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
+    {/* Header */}
+    <header class="mb-12 flex flex-col gap-6">
+      <div class="flex items-center justify-between">
+        <a href={`/${lang}/`} class="font-heading text-2xl font-bold tracking-tight text-starlight">
+          {t('blog.title')}
+        </a>
+        <nav class="flex items-center gap-4 text-sm">
+          <a
+            href={`/${otherLang}/`}
+            class="text-text-secondary transition-colors hover:text-starlight"
+            title={switchLabel}
+          >
+            {otherLang.toUpperCase()}
+          </a>
+          <a
+            href="https://www.ivanovishado.dev"
+            class="text-text-secondary transition-colors hover:text-event-horizon"
+            rel="noopener"
+          >
+            {t('nav.backToPortfolio')}
+          </a>
+        </nav>
+      </div>
+      <p class="max-w-xl text-text-secondary">
+        {t('blog.description')}
+      </p>
+    </header>
+
+    {/* Post list */}
+    <section>
+      <h2 class="font-heading mb-8 text-lg font-semibold text-text-secondary uppercase tracking-wide">
+        {t('blog.latestPosts')}
+      </h2>
+      <ul class="flex flex-col gap-10">
+        {posts.map((post) => {
+          const slug = post.id.replace(/^(en|es)\//, '');
+          const stats = readingTime(post.body ?? '');
+          return (
+            <li>
+              <BlogCard
+                title={post.data.title}
+                description={post.data.description}
+                pubDate={post.data.pubDate}
+                tags={post.data.tags}
+                slug={slug}
+                lang={lang}
+                readingTime={stats.text}
+              />
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  </div>
+</BaseLayout>

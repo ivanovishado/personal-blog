@@ -1,0 +1,60 @@
+---
+/*
+ * CopyCode — Adds a "copy to clipboard" button to all code blocks in .prose.
+ * Include once in BaseLayout; the script auto-discovers <pre> elements.
+ */
+---
+
+{/* SVG icon templates — cloned by JS, avoids innerHTML */}
+<template id="icon-clipboard">
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256" fill="currentColor">
+    <path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z" />
+  </svg>
+</template>
+<template id="icon-check">
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256" fill="currentColor">
+    <path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z" />
+  </svg>
+</template>
+
+<script>
+  function initCopyButtons() {
+    const clipboardTpl = document.getElementById('icon-clipboard') as HTMLTemplateElement;
+    const checkTpl = document.getElementById('icon-check') as HTMLTemplateElement;
+    if (!clipboardTpl || !checkTpl) return;
+
+    document.querySelectorAll('.prose pre').forEach((pre) => {
+      if (pre.parentElement?.classList.contains('code-block-wrapper')) return;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'code-block-wrapper';
+      pre.parentElement!.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+
+      const btn = document.createElement('button');
+      btn.className = 'copy-button';
+      btn.setAttribute('aria-label', 'Copy code');
+      btn.appendChild(clipboardTpl.content.cloneNode(true));
+
+      let resetTimer: number | undefined;
+      btn.addEventListener('click', async () => {
+        const code = pre.querySelector('code')?.textContent ?? pre.textContent ?? '';
+        await navigator.clipboard.writeText(code);
+
+        clearTimeout(resetTimer);
+        btn.replaceChildren(checkTpl.content.cloneNode(true));
+        btn.style.color = 'var(--color-event-horizon)';
+
+        resetTimer = window.setTimeout(() => {
+          btn.replaceChildren(clipboardTpl.content.cloneNode(true));
+          btn.style.color = '';
+        }, 2000);
+      });
+
+      wrapper.appendChild(btn);
+    });
+  }
+
+  initCopyButtons();
+  document.addEventListener('astro:after-swap', initCopyButtons);
+</script>

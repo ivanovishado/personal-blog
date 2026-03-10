@@ -1,0 +1,134 @@
+---
+interface Props {
+  title: string;
+  description: string;
+  canonicalURL?: string;
+  ogImage?: string;
+  lang?: string;
+  type?: 'website' | 'article';
+  publishedTime?: string;
+  modifiedTime?: string;
+  tags?: string[];
+  authors?: string[];
+}
+
+const {
+  title,
+  description,
+  canonicalURL,
+  ogImage = '/og-default.png',
+  lang = 'en',
+  type = 'website',
+  publishedTime,
+  modifiedTime,
+  tags = [],
+  authors = ['Ivan Galaviz'],
+} = Astro.props;
+
+const siteUrl = 'https://blog.ivanovishado.dev';
+const fullTitle = `${title} | Ivan Galaviz Blog`;
+const resolvedCanonical = canonicalURL ?? Astro.url.href;
+const resolvedOgImage = ogImage.startsWith('http') ? ogImage : `${siteUrl}${ogImage}`;
+const alternateLang = lang === 'en' ? 'es' : 'en';
+const ogLocale = lang === 'en' ? 'en_US' : 'es_MX';
+
+// Build alternate URL by swapping locale prefix
+const currentPath = Astro.url.pathname;
+const alternateUrl = currentPath.replace(
+  new RegExp(`^/${lang}/`),
+  `/${alternateLang}/`,
+);
+
+// JSON-LD: BlogPosting (only for articles)
+const blogPostingSchema = type === 'article'
+  ? JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'BlogPosting',
+      headline: title,
+      description,
+      image: resolvedOgImage,
+      datePublished: publishedTime,
+      ...(modifiedTime && { dateModified: modifiedTime }),
+      author: authors.map((name) => ({
+        '@type': 'Person',
+        name,
+        ...(name === 'Ivan Galaviz' && { '@id': 'https://www.ivanovishado.dev/#person' }),
+      })),
+      publisher: {
+        '@type': 'Person',
+        name: authors[0],
+        '@id': 'https://www.ivanovishado.dev/#person',
+      },
+      keywords: tags.join(', '),
+      mainEntityOfPage: {
+        '@type': 'WebPage',
+        '@id': resolvedCanonical,
+      },
+    })
+  : null;
+
+// JSON-LD: BreadcrumbList
+const breadcrumbItems = [
+  {
+    '@type': 'ListItem',
+    position: 1,
+    name: 'Blog',
+    item: `${siteUrl}/${lang}/`,
+  },
+];
+
+if (type === 'article') {
+  breadcrumbItems.push({
+    '@type': 'ListItem',
+    position: 2,
+    name: title,
+    item: resolvedCanonical,
+  });
+}
+
+const breadcrumbSchema = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: breadcrumbItems,
+});
+---
+
+<title>{fullTitle}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={resolvedCanonical} />
+
+{/* Open Graph */}
+<meta property="og:title" content={fullTitle} />
+<meta property="og:description" content={description} />
+<meta property="og:image" content={resolvedOgImage} />
+<meta property="og:type" content={type} />
+<meta property="og:locale" content={ogLocale} />
+<meta property="og:url" content={resolvedCanonical} />
+<meta property="og:site_name" content="Ivan Galaviz Blog" />
+
+{type === 'article' && publishedTime && (
+  <meta property="article:published_time" content={publishedTime} />
+)}
+{type === 'article' && modifiedTime && (
+  <meta property="article:modified_time" content={modifiedTime} />
+)}
+{type === 'article' && tags.map((tag) => (
+  <meta property="article:tag" content={tag} />
+))}
+
+{/* Twitter Card */}
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={fullTitle} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={resolvedOgImage} />
+
+{/* Hreflang alternates */}
+<link rel="alternate" hreflang="en" href={`${siteUrl}${lang === 'en' ? currentPath : alternateUrl}`} />
+<link rel="alternate" hreflang="es" href={`${siteUrl}${lang === 'es' ? currentPath : alternateUrl}`} />
+<link rel="alternate" hreflang="x-default" href={`${siteUrl}${lang === 'en' ? currentPath : alternateUrl}`} />
+
+{/* JSON-LD structured data */}
+{blogPostingSchema && (
+  <script type="application/ld+json" set:html={blogPostingSchema} />
+)}
+<script type="application/ld+json" set:html={breadcrumbSchema} />

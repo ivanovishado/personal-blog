@@ -1,0 +1,69 @@
+/*
+ * Design Tokens
+ * Source of truth: portfolio at www.ivanovishado.dev/styles/globals.css
+ * Last synced: 2026-03-10
+ *
+ * Light mode is the default (no .dark class).
+ * Dark mode activates when <html> has the "dark" class.
+ */
+
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* Light mode (default)                                                */
+/* ------------------------------------------------------------------ */
+:root {
+  --color-void: #FAFAF9;
+  --color-starlight: #1A1F2A;
+  --color-event-horizon: #2563EB;
+  --color-event-horizon-deep: #1E40AF;
+  --color-active-signal: #92400E;
+  --color-dark-900: #FFFFFF;
+  --color-dark-800: #F8FAFC;
+  --color-dark-700: #F1F5F9;
+  --color-dark-600: #E2E8F0;
+  --color-text-secondary: #64748B;
+  --color-text-tertiary: #94A3B8;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --font-heading: "Cabinet Grotesk", system-ui, sans-serif;
+  --font-prose: "Source Serif 4", "Source Serif Pro", Georgia, serif;
+  --font-code: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dark mode                                                           */
+/* ------------------------------------------------------------------ */
+:root.dark {
+  --color-void: #06080C;
+  --color-starlight: #e2e8f0;
+  --color-event-horizon: #2563EB;
+  --color-event-horizon-deep: #1E40AF;
+  --color-active-signal: #F5F0E8;
+  --color-dark-900: #0C0F14;
+  --color-dark-800: #12161E;
+  --color-dark-700: #1A1F2A;
+  --color-dark-600: #242B38;
+  --color-text-secondary: #94A3B8;
+  --color-text-tertiary: #64748B;
+  --color-border: rgba(255, 255, 255, 0.08);
+}
+
+/* ------------------------------------------------------------------ */
+/* Tailwind v4 theme integration                                       */
+/* ------------------------------------------------------------------ */
+@theme {
+  --color-void: var(--color-void);
+  --color-starlight: var(--color-starlight);
+  --color-event-horizon: var(--color-event-horizon);
+  --color-event-horizon-deep: var(--color-event-horizon-deep);
+  --color-active-signal: var(--color-active-signal);
+  --color-surface-900: var(--color-dark-900);
+  --color-surface-800: var(--color-dark-800);
+  --color-surface-700: var(--color-dark-700);
+  --color-surface-600: var(--color-dark-600);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-tertiary: var(--color-text-tertiary);
+  --font-heading: var(--font-heading);
+  --font-prose: var(--font-prose);
+  --font-code: var(--font-code);
+}
