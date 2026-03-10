@@ -1,0 +1,253 @@
+---
+title: "My More Deterministic Claude Code Setup"
+description: "How I use Claude Code hooks to add deterministic enforcement to an inherently non-deterministic LLM workflow — token savings, model governance, and code quality gates that fire on every tool call."
+pubDate: 2026-03-10
+authors: ["Claude Opus 4.6", "Ivan Galaviz"]
+tags: ["claude-code", "ai-tooling", "developer-experience"]
+lang: en
+draft: true
+tldr: "Claude Code hooks fire on every tool call regardless of what the model decides. I use them for token savings, model routing, code quality gates, and auto-formatting."
+---
+
+I use Claude Code as my primary development tool. The model writes solid code, understands complex codebases, and follows the instructions I put in CLAUDE.md, sometimes. It respects my "no `any` types" rule maybe 90% of the time. It remembers to run Prettier after editing a file maybe 95% of the time. Those sound like good percentages until you realize the remaining 5-10% means you're still catching and re-prompting the same violations every few sessions.
+
+So I stopped asking the model to follow rules and started making rules follow themselves. Claude Code has a hook system: shell scripts that fire on specific events during a session. They receive JSON on stdin, return exit codes, and run on every single matching tool call regardless of what the model decides to do. CLAUDE.md instructions work most of the time. Hooks work every time.
+
+## What Hooks Actually Are
+
+Hooks are shell scripts registered in your `settings.json` that Claude Code executes at defined points during a session. There are four event types: `PreToolUse` fires before a tool call executes, `PostToolUse` fires after completion, `Stop` fires when the model tries to finish a task, and `SessionStart` fires once when a new conversation begins.
+
+Each hook receives the tool call's details as JSON on stdin. Your script inspects that JSON, does whatever checking or transformation it needs, and communicates back through exit codes: 0 means allow, 2 means block. PreToolUse hooks have an extra capability: they can return modified input that replaces the original tool call, and the model never knows the substitution happened.
+
+A minimal hook that blocks `.env` files from being edited:
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+
+case "$FILE" in
+  *.env) echo "BLOCKED: don't edit .env files" >&2; exit 2 ;;
+esac
+
+exit 0
+```
+
+The model might decide to ignore a CLAUDE.md instruction because it thinks the current context justifies an exception. Hooks don't make judgment calls. They execute on every qualifying event, every time.
+
+## Token Savings on Every Command
+
+Context windows are finite. Every token spent on verbose CLI output is a token not available for reasoning about your code. A `git diff` on a medium-sized changeset can return thousands of lines that the model dutifully reads, crowding out the actual problem you asked it to solve.
+
+RTK (Rust Token Killer) is a CLI proxy that filters and compresses command output, cutting 60-90% of the tokens on common dev operations. I have a PreToolUse hook that transparently rewrites commands to their RTK equivalents before the model executes them.
+
+The hook starts with a guard clause so it degrades gracefully on machines where RTK isn't installed:
+
+```bash
+# Guards: skip silently if dependencies missing
+if ! command -v rtk &>/dev/null || ! command -v jq &>/dev/null; then
+  exit 0
+fi
+```
+
+No RTK binary? The hook exits silently and the raw command runs as-is.
+
+The core logic matches commands by pattern. The git handling, condensed:
+
+```bash
+if echo "$MATCH_CMD" | grep -qE '^git[[:space:]]'; then
+  GIT_SUBCMD=$(echo "$MATCH_CMD" | sed -E \
+    -e 's/^git[[:space:]]+//' \
+    -e 's/(-C|-c)[[:space:]]+[^[:space:]]+[[:space:]]*//g' \
+    -e 's/--[a-z-]+=[^[:space:]]+[[:space:]]*//g')
+  case "$GIT_SUBCMD" in
+    status|status\ *|diff|diff\ *|log|log\ *|add|add\ *)
+      REWRITTEN="${ENV_PREFIX}rtk $CMD_BODY"
+      ;;
+  esac
+fi
+```
+
+The same structure repeats for `gh`, `cargo`, `docker`, `kubectl`, `pytest`, `tsc`, `eslint`, `prettier`, and about twenty other commands. When a match hits, the hook outputs JSON with an `updatedInput` field that tells Claude Code to substitute the modified command:
+
+```bash
+jq -n \
+  --argjson updated "$UPDATED_INPUT" \
+  '{
+    "hookSpecificOutput": {
+      "hookEventName": "PreToolUse",
+      "permissionDecision": "allow",
+      "permissionDecisionReason": "RTK auto-rewrite",
+      "updatedInput": $updated
+    }
+  }'
+```
+
+That `updatedInput` field is the mechanism that makes this work. The model asks to run `git status`, the hook intercepts and changes it to `rtk git status`, Claude Code executes the rewritten version, and the model receives compressed output. The entire pipeline is invisible, which means the model can't opt out of the savings.
+
+## Model Governance
+
+Claude Code's agent teams let you delegate work to specialized subagents. I use five types: `fullstack-developer`, `test-writer`, `test-debugger`, and `code-reviewer` for code work, plus `Explore` for read-only codebase search. Each type warrants a different model. Explore agents grep files and read code, which sonnet handles fine at a fraction of the cost. Agents that write or review code need the most capable model available.
+
+The model that spawns these agents doesn't always respect the model assignments in CLAUDE.md. Running on opus, it sometimes spawns an Explore agent on opus too, burning expensive tokens on a task that sonnet handles equally well. The reverse also happens: it drops a critical code-review agent to a cheaper model.
+
+Three PreToolUse hooks on the Agent tool enforce the governance layer. The cleanest is the Explore interceptor, shown here in full:
+
+```bash
+#!/bin/bash
+# Enforce sonnet model on Explore agent for faster, cheaper codebase exploration.
+# Hook type: PreToolUse (matcher: Agent)
+
+INPUT=$(cat)
+SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty')
+MODEL=$(echo "$INPUT" | jq -r '.tool_input.model // empty')
+
+if [ "$SUBAGENT_TYPE" = "Explore" ] && [ "$MODEL" != "sonnet" ]; then
+  echo "BLOCKED: Explore agent must use model: \"sonnet\"." >&2
+  exit 2
+fi
+
+exit 0
+```
+
+It reads the Agent tool call from stdin, checks if it's an Explore agent without the sonnet model specified, and blocks it. The error message tells the model exactly how to fix the call, so it self-corrects on the next attempt.
+
+The dev agent hook does the inverse: blocks `fullstack-developer`, `test-writer`, `test-debugger`, and `code-reviewer` if they specify anything other than opus. A third hook does the same for the Plan agent. The governance is simple: cheap model for search, expensive model for code, no exceptions.
+
+## Code Quality Gates That Can't Be Skipped
+
+### Blocking Bad Edits
+
+My CLAUDE.md says "no `any` types" and "no `console.log` in application code." The model follows these rules most of the time, but when it's deep in a complex refactor or juggling multiple files, it occasionally slips. A PreToolUse hook on Edit and Write makes these rules structural:
+
+```bash
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+
+# Block sensitive files outright
+case "$FILE_PATH" in
+  *.env|*.env.local|*.env.production)
+    echo "BLOCKED: Do not edit .env files." >&2; exit 2 ;;
+  */package-lock.json|*/pnpm-lock.yaml)
+    echo "BLOCKED: Do not edit lock files." >&2; exit 2 ;;
+esac
+
+# Extract new content, check only TS files
+case "$FILE_PATH" in *.ts|*.tsx) ;; *) exit 0 ;; esac
+CONTENT=$(echo "$INPUT" | jq -r '.tool_input.content // .tool_input.new_text // empty')
+
+# No console.log in app code (allow in tests)
+case "$FILE_PATH" in
+  *.test.ts|*.test.tsx) ;;
+  *)
+    if echo "$CONTENT" | grep -qE 'console\.(log|warn|error)\s*\('; then
+      echo "BLOCKED: console.log in app code." >&2; exit 2
+    fi ;;
+esac
+
+# No any type
+if echo "$CONTENT" | grep -qE ':\s*any\b|<any>|as\s+any\b'; then
+  echo "BLOCKED: TypeScript 'any' type detected." >&2; exit 2
+fi
+```
+
+The hook inspects the content the model is about to write, not what's already on disk. If the new code contains a violation, the write never happens. The model gets an error message and has to produce clean code on its next attempt.
+
+### No "Done" Until Types Pass
+
+The Stop event fires when the model decides it's finished. If the hook exits with code 2, Claude Code tells the model its task isn't complete and forces it to keep working.
+
+I use this to run the TypeScript compiler as a completion gate:
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+
+# Prevent infinite loops
+STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')
+if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
+  exit 0
+fi
+
+# Only type-check if there are modified TS/TSX files
+if ! git status --porcelain 2>/dev/null | grep -qE '\.(ts|tsx)$'; then
+  exit 0
+fi
+
+# Use RTK when available for token-optimized output
+if command -v rtk &>/dev/null; then
+  TSC="rtk tsc"
+else
+  TSC="npx tsc"
+fi
+
+TSC_OUTPUT=$($TSC --noEmit 2>&1)
+TSC_EXIT=$?
+
+if [ $TSC_EXIT -ne 0 ]; then
+  echo "TypeScript type-check failed. Fix these errors:" >&2
+  echo "$TSC_OUTPUT" | head -40 >&2
+  exit 2
+fi
+
+exit 0
+```
+
+The `stop_hook_active` guard on line 5 prevents infinite loops: without it, the model could fix one type error, try to finish, trigger the hook again, and loop indefinitely if the fix introduced a new error. This hook also fires on `SubagentStop`, so delegated work gets the same gate. A fullstack-developer subagent can't mark its task as complete unless `tsc --noEmit` passes clean.
+
+## The Rest of the Stack
+
+A few more hooks fill in the gaps. A PostToolUse hook runs Prettier on every file after an edit, matching on file extension and calling `npx prettier --write` (or `rtk prettier` when available). The model doesn't need to remember to format; it just happens.
+
+An advisory PreToolUse hook on Grep watches for symbol-lookup patterns (regex like `class\s+Foo` or bare PascalCase identifiers) and suggests using the LSP tool instead for more precise results. It never blocks, just prints a hint. The model can ignore the suggestion when grep is genuinely what it needs.
+
+Two session hooks handle context-setting. A SessionStart hook prints initialization reminders at the beginning of every conversation: read the project's AGENTS.md, check the skill intent table, remember key code conventions. A UserPromptSubmit hook fires on every user message as a lightweight refresher of the same priorities. These hooks set context rather than enforce constraints.
+
+A PostToolUse hook watches for edits to `.env.example` or `setup-local.sh` and compares the env var keys between them. If they've drifted out of sync, it lists the missing keys from each side. Advisory only.
+
+Beyond hooks, the setup includes eight plugins (context7 for live docs lookup, semgrep for static analysis, hookify for creating new hooks from conversation analysis, among others) and three MCP servers (context7 for documentation, Prisma for schema management, and shadcn/ui for component patterns). The plugins extend what the model can do; the hooks constrain how it does it.
+
+## Wiring It Up
+
+Hooks live in `settings.json` under a `hooks` key, grouped by event type. Each event type contains matchers that filter which tool calls trigger which scripts:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/rtk-rewrite.sh" }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/intercept-explore-agent.sh" },
+          { "type": "command", "command": "~/.claude/hooks/enforce-opus-on-dev-agents.sh" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": ".claude/hooks/auto-format.sh" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": ".claude/hooks/type-check-on-stop.sh" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Notice the path difference. User-level hooks use absolute paths (`~/.claude/hooks/...`) and live in `~/.claude/settings.json`, applying to every project on the machine. That's where RTK rewriting, model governance, and LSP suggestions belong since they make sense everywhere. Project-level hooks use relative paths (`.claude/hooks/...`) and live in the repo's own `.claude/settings.json`. Pre-edit checks, auto-formatting, type-check gates, and session hooks go here because the specific rules change between codebases. A project using Convex blocks edits to `convex/_generated/`; a different project might block edits to `prisma/migrations/`.
+
+The model keeps getting better with each release. Some of these hooks might become unnecessary as instruction-following improves. But right now, a useful rule of thumb: if you've re-prompted the same correction more than twice, it should be a hook. The model handles creative work; the hooks handle invariants. The split works because it puts deterministic enforcement exactly where a non-deterministic system needs guardrails.
