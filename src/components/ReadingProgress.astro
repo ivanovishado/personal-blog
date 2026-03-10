@@ -1,0 +1,281 @@
+---
+import { useTranslation } from '../i18n/ui';
+
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface Props {
+  headings: Heading[];
+  lang?: string;
+}
+
+const { headings, lang = 'en' } = Astro.props;
+const t = useTranslation(lang as 'en' | 'es');
+const filteredHeadings = headings.filter((h) => h.depth === 2 || h.depth === 3);
+const tocTitle = t('post.onThisPage');
+---
+
+<div id="reading-progress-wrapper">
+  {/* Desktop: thin progress bar (hidden below lg) */}
+  <div
+    id="progress-bar"
+    class="hidden lg:block absolute top-0 left-0 w-full h-[2px] z-[1]"
+    style="background: var(--color-event-horizon); transform: scaleX(0); transform-origin: 0 0;"
+  />
+
+  {/* Mobile: sticky mini-header (hidden at lg+) */}
+  <nav class="lg:hidden border-t border-[var(--color-border)]" id="mobile-toc-header" aria-label={tocTitle}>
+    <div class="mx-auto max-w-5xl px-4 py-2">
+      <button
+        id="mobile-toc-toggle"
+        class="flex w-full items-center gap-2 active:scale-[0.97] transition-transform"
+        aria-expanded="false"
+        aria-controls="mobile-toc-panel"
+      >
+        {/* Circular progress ring */}
+        <svg
+          id="progress-circle"
+          width="24"
+          height="24"
+          viewBox="0 0 36 36"
+          class="shrink-0 -rotate-90"
+          aria-hidden="true"
+        >
+          <circle
+            cx="18" cy="18" r="15"
+            fill="none"
+            stroke="var(--color-border)"
+            stroke-width="2"
+          />
+          <circle
+            id="progress-circle-fg"
+            cx="18" cy="18" r="15"
+            fill="none"
+            stroke="var(--color-event-horizon)"
+            stroke-width="2"
+            stroke-dasharray="94.25"
+            stroke-dashoffset="94.25"
+            stroke-linecap="round"
+          />
+        </svg>
+
+        {/* Dynamic section name */}
+        <span
+          id="current-section-name"
+          class="font-heading text-xs text-text-secondary truncate text-left flex-1"
+        >
+          {tocTitle}
+        </span>
+
+        {/* Chevron indicator */}
+        <svg
+          id="mobile-toc-chevron"
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 256 256"
+          fill="currentColor"
+          class="shrink-0 text-text-tertiary transition-transform duration-200"
+          style="transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);"
+          aria-hidden="true"
+        >
+          <path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z" />
+        </svg>
+      </button>
+
+      {/* Expandable TOC panel — grid-row collapse animation */}
+      <div
+        id="mobile-toc-panel"
+        class="grid transition-[grid-template-rows] duration-200"
+        style="grid-template-rows: 0fr; transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);"
+      >
+        <div class="overflow-hidden">
+          <ul
+            class="space-y-1 text-sm pt-2 pb-1 max-h-[60vh] overflow-y-auto"
+            id="mobile-toc-list"
+            style="mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent); -webkit-mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent);"
+          >
+            {filteredHeadings.map((heading) => (
+              <li class:list={[heading.depth === 3 && 'ml-4']}>
+                <a
+                  href={`#${heading.slug}`}
+                  class="toc-link block py-0.5 text-text-secondary hover:text-event-horizon transition-colors"
+                  data-slug={heading.slug}
+                >
+                  {heading.text}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </nav>
+</div>
+
+<style>
+  .toc-link.active {
+    color: var(--color-event-horizon);
+    font-weight: 500;
+  }
+</style>
+
+<script>
+  const CIRCUMFERENCE = 2 * Math.PI * 15;
+
+  let observer: IntersectionObserver | null = null;
+  let controller: AbortController | null = null;
+
+  function init() {
+    cleanup();
+    controller = new AbortController();
+    const { signal } = controller;
+
+    const progressBar = document.getElementById('progress-bar');
+    const progressCircleFg = document.getElementById('progress-circle-fg');
+    const sectionName = document.getElementById('current-section-name');
+    const defaultTitle = sectionName?.textContent?.trim() || '';
+    const toggleBtn = document.getElementById('mobile-toc-toggle');
+    const panel = document.getElementById('mobile-toc-panel');
+    const chevron = document.getElementById('mobile-toc-chevron');
+
+    // Reset panel state in case init() re-runs while panel is open
+    if (panel) panel.style.gridTemplateRows = '0fr';
+    if (chevron) chevron.style.transform = '';
+    toggleBtn?.setAttribute('aria-expanded', 'false');
+
+    // Merge all TOC links (desktop + mobile) into a single array
+    const allLinks = [
+      ...document.querySelectorAll<HTMLAnchorElement>('#toc-list .toc-link'),
+      ...document.querySelectorAll<HTMLAnchorElement>('#mobile-toc-list .toc-link'),
+    ];
+
+    // Build heading elements from unique slugs
+    const slugs = new Set<string>();
+    allLinks.forEach((link) => {
+      const slug = link.getAttribute('data-slug');
+      if (slug) slugs.add(slug);
+    });
+
+    const headingElements: HTMLElement[] = [];
+    slugs.forEach((slug) => {
+      const el = document.getElementById(slug);
+      if (el) headingElements.push(el);
+    });
+
+    const firstHeading = headingElements[0] ?? null;
+
+    // --- IntersectionObserver: single observer for all heading tracking ---
+    if (headingElements.length > 0) {
+      observer = new IntersectionObserver(
+        (entries) => {
+          const lastIntersecting = [...entries].reverse().find((e) => e.isIntersecting);
+          if (!lastIntersecting) return;
+
+          const activeSlug = lastIntersecting.target.id;
+
+          allLinks.forEach((link) => {
+            link.classList.toggle('active', link.getAttribute('data-slug') === activeSlug);
+          });
+
+          if (sectionName) {
+            sectionName.textContent =
+              (lastIntersecting.target as HTMLElement).textContent?.trim() || '';
+          }
+        },
+        {
+          rootMargin: '-80px 0px -60% 0px',
+          threshold: 0,
+        },
+      );
+
+      headingElements.forEach((el) => observer!.observe(el));
+    }
+
+    // --- Scroll progress with change detection ---
+    let ticking = false;
+    let lastProgress = -1;
+    let wasAboveHeadings = false;
+    let maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+
+    window.addEventListener('resize', () => {
+      maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    }, { passive: true, signal });
+
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+
+      requestAnimationFrame(() => {
+        const scrollY = window.scrollY;
+        const progress = maxScroll > 0 ? Math.min(scrollY / maxScroll, 1) : 0;
+
+        if (progress !== lastProgress) {
+          lastProgress = progress;
+          if (progressBar) progressBar.style.transform = `scaleX(${progress})`;
+          if (progressCircleFg) {
+            progressCircleFg.style.strokeDashoffset = String(
+              CIRCUMFERENCE * (1 - progress),
+            );
+          }
+        }
+
+        // Reset section name when scrolled above all headings
+        const isAbove = firstHeading ? scrollY < firstHeading.offsetTop : false;
+        if (isAbove && !wasAboveHeadings) {
+          wasAboveHeadings = true;
+          if (sectionName) sectionName.textContent = defaultTitle;
+          allLinks.forEach((link) => link.classList.remove('active'));
+        } else if (!isAbove) {
+          wasAboveHeadings = false;
+        }
+
+        ticking = false;
+      });
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true, signal });
+    onScroll();
+
+    // --- Mobile TOC toggle ---
+    let isOpen = false;
+
+    const closePanel = () => {
+      isOpen = false;
+      toggleBtn?.setAttribute('aria-expanded', 'false');
+      if (panel) panel.style.gridTemplateRows = '0fr';
+      if (chevron) chevron.style.transform = '';
+    };
+
+    toggleBtn?.addEventListener('click', () => {
+      isOpen = !isOpen;
+      toggleBtn.setAttribute('aria-expanded', String(isOpen));
+      if (panel) panel.style.gridTemplateRows = isOpen ? '1fr' : '0fr';
+      if (chevron) chevron.style.transform = isOpen ? 'rotate(180deg)' : '';
+    }, { signal });
+
+    // Close panel when a mobile TOC link is tapped
+    document.querySelectorAll<HTMLAnchorElement>('#mobile-toc-list .toc-link').forEach((link) => {
+      link.addEventListener('click', closePanel, { signal });
+    });
+
+    // Close panel on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isOpen) closePanel();
+    }, { signal });
+  }
+
+  function cleanup() {
+    observer?.disconnect();
+    observer = null;
+    controller?.abort();
+    controller = null;
+  }
+
+  init();
+  document.addEventListener('astro:after-swap', init);
+  document.addEventListener('astro:before-swap', cleanup);
+</script>

@@ -1,6 +1,7 @@
 ---
 import BaseLayout from './BaseLayout.astro';
 import TableOfContents from '../components/TableOfContents.astro';
+import ReadingProgress from '../components/ReadingProgress.astro';
 import LanguageSwitcher from '../components/LanguageSwitcher.astro';
 
 interface Heading {
@@ -91,6 +92,11 @@ const formattedUpdatedDate = updatedDate
         <LanguageSwitcher currentLang={lang} translationSlug={translationSlug} />
       </div>
     </div>
+
+    {/* Reading progress (both viewports) */}
+    {headings.length > 0 && (
+      <ReadingProgress headings={headings} lang={lang} />
+    )}
   </header>
 
   {/* Two-column layout: main content + sidebar TOC */}
@@ -161,11 +167,6 @@ const formattedUpdatedDate = updatedDate
           </p>
         </aside>
       )}
-
-      {/* Mobile TOC (above content) */}
-      <div class="lg:hidden">
-        <TableOfContents headings={headings} lang={lang} />
-      </div>
 
       {/* Rendered MDX content */}
       <div class="prose">
