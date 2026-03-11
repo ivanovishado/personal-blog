@@ -2,6 +2,7 @@
 import { getCollection, render } from 'astro:content';
 import BlogPost from '../../layouts/BlogPost.astro';
 import { languages } from '../../i18n/ui';
+import { extractSlug } from '../../lib/posts';
 import readingTime from 'reading-time';
 
 export async function getStaticPaths() {
@@ -14,7 +15,7 @@ export async function getStaticPaths() {
     });
 
     for (const post of posts) {
-      const slug = post.id.replace(/^(en|es)\//, '');
+      const slug = extractSlug(post.id);
       paths.push({
         params: { lang, slug },
         props: { post },

@@ -1,7 +1,8 @@
 import { getCollection } from 'astro:content';
+import { extractSlug } from '../lib/posts';
 import type { APIContext } from 'astro';
 
-export async function GET(_context: APIContext) {
+export async function GET(context: APIContext) {
   const posts = await getCollection('blog', ({ data }) => !data.draft);
 
   const sorted = posts.sort(
@@ -12,9 +13,9 @@ export async function GET(_context: APIContext) {
   const esPosts = sorted.filter((p) => p.data.lang === 'es');
 
   const formatPost = (post: (typeof sorted)[number]) => {
-    const slug = post.id.replace(/^(en|es)\//, '');
+    const slug = extractSlug(post.id);
     const lang = post.data.lang;
-    return `- [${post.data.title}](https://blog.ivanovishado.dev/${lang}/${slug}.md): ${post.data.description}`;
+    return `- [${post.data.title}](${context.site}${lang}/${slug}.md): ${post.data.description}`;
   };
 
   const lines = [

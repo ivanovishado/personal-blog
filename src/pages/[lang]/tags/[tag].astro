@@ -3,6 +3,7 @@ import { getCollection } from 'astro:content';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import BlogCard from '../../../components/BlogCard.astro';
 import { languages, useTranslation } from '../../../i18n/ui';
+import { extractSlug } from '../../../lib/posts';
 import readingTime from 'reading-time';
 
 export async function getStaticPaths() {
@@ -88,7 +89,7 @@ const { posts, tag } = Astro.props;
     {/* Post list */}
     <ul class="flex flex-col gap-10">
       {posts.map((post) => {
-        const slug = post.id.replace(/^(en|es)\//, '');
+        const slug = extractSlug(post.id);
         const stats = readingTime(post.body ?? '');
         return (
           <li>

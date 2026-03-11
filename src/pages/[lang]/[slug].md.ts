@@ -1,5 +1,6 @@
 import { getCollection } from 'astro:content';
 import { languages } from '../../i18n/ui';
+import { extractSlug } from '../../lib/posts';
 import type { APIContext } from 'astro';
 
 export async function getStaticPaths() {
@@ -12,7 +13,7 @@ export async function getStaticPaths() {
     });
 
     for (const post of posts) {
-      const slug = post.id.replace(/^(en|es)\//, '');
+      const slug = extractSlug(post.id);
       paths.push({
         params: { lang, slug },
         props: { post },

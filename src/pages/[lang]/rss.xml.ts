@@ -1,6 +1,7 @@
 import rss from '@astrojs/rss';
 import { getCollection } from 'astro:content';
 import { languages, useTranslation } from '../../i18n/ui';
+import { extractSlug } from '../../lib/posts';
 import type { APIContext } from 'astro';
 
 export function getStaticPaths() {
@@ -27,7 +28,7 @@ export async function GET(context: APIContext) {
       title: post.data.title,
       pubDate: post.data.pubDate,
       description: post.data.description,
-      link: `/${lang}/${post.id.replace(/^(en|es)\//, '')}/`,
+      link: `/${lang}/${extractSlug(post.id)}/`,
     })),
     customData: `<language>${lang}</language>`,
   });
