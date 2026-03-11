@@ -21,7 +21,7 @@ export const ui = {
     'tags.title': 'Tags',
     'tags.postsTagged': 'Posts tagged with',
     'blog.title': 'Blog',
-    'blog.description': 'Thoughts on software engineering, event-driven systems, and the craft of building software.',
+    'blog.description': 'Thoughts on software engineering, maybe will add more topics later.',
     'blog.allPosts': 'All Posts',
     'blog.latestPosts': 'Latest Posts',
     'common.language': 'Language',
@@ -31,7 +31,7 @@ export const ui = {
     'theme.dark': 'Dark',
     'theme.system': 'System',
     'rss.title': 'Ivan Galaviz Blog',
-    'rss.description': 'Thoughts on software engineering, event-driven systems, and the craft of building software.',
+    'rss.description': 'Thoughts on software engineering, maybe will add more topics later.',
   },
   es: {
     'nav.home': 'Inicio',
@@ -52,7 +52,7 @@ export const ui = {
     'tags.title': 'Etiquetas',
     'tags.postsTagged': 'Posts etiquetados con',
     'blog.title': 'Blog',
-    'blog.description': 'Reflexiones sobre ingeniería de software, sistemas event-driven y el arte de construir software.',
+    'blog.description': 'Reflexiones sobre ingeniería de software, quizás agregue más temas después.',
     'blog.allPosts': 'Todos los Posts',
     'blog.latestPosts': 'Últimos Posts',
     'common.language': 'Idioma',
@@ -62,7 +62,7 @@ export const ui = {
     'theme.dark': 'Oscuro',
     'theme.system': 'Sistema',
     'rss.title': 'Blog de Ivan Galaviz',
-    'rss.description': 'Reflexiones sobre ingeniería de software, sistemas event-driven y el arte de construir software.',
+    'rss.description': 'Reflexiones sobre ingeniería de software, quizás agregue más temas después.',
   },
 } as const;
 

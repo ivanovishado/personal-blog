@@ -5,7 +5,8 @@ pubDate: 2026-03-10
 authors: ["Claude Opus 4.6", "Ivan Galaviz"]
 tags: ["claude-code", "ai-tooling", "developer-experience"]
 lang: en
-draft: true
+draft: false
+translationSlug: "deterministic-claude-code-setup"
 tldr: "Claude Code hooks fire on every tool call regardless of what the model decides. I use them for token savings, model routing, code quality gates, and auto-formatting."
 ---
 
@@ -205,14 +206,19 @@ Two session hooks handle context-setting. A SessionStart hook prints initializat
 
 A PostToolUse hook watches for edits to `.env.example` or `setup-local.sh` and compares the env var keys between them. If they've drifted out of sync, it lists the missing keys from each side. Advisory only.
 
-Beyond hooks, the setup includes eight plugins (context7 for live docs lookup, semgrep for static analysis, hookify for creating new hooks from conversation analysis, among others) and three MCP servers (context7 for documentation, Prisma for schema management, and shadcn/ui for component patterns). The plugins extend what the model can do; the hooks constrain how it does it.
+Beyond hooks, the setup includes eight plugins (context7 for live docs lookup, hookify for creating new hooks from conversation analysis, among others) and three MCP servers (context7 for documentation, Prisma for schema management, and shadcn/ui for component patterns). The plugins extend what the model can do; the hooks constrain how it does it.
 
 ## Wiring It Up
 
-Hooks live in `settings.json` under a `hooks` key, grouped by event type. Each event type contains matchers that filter which tool calls trigger which scripts:
+The full setup lives in `settings.json`. A few top-level keys establish the foundation, and hooks layer enforcement on top:
 
 ```json
 {
+  "model": "opus",
+  "env": {
+    "CLAUDE_CODE_EFFORT_LEVEL": "max",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -247,6 +253,12 @@ Hooks live in `settings.json` under a `hooks` key, grouped by event type. Each e
   }
 }
 ```
+
+The `model` key sets opus as the default for the main session. This matters for subagents too: any agent spawned without an explicit model override inherits from its parent. Combined with the governance hooks from earlier, this creates a layered system where opus is the baseline, hooks force sonnet for Explore agents and enforce opus for dev agents, and nothing slips through unintentionally.
+
+`CLAUDE_CODE_EFFORT_LEVEL` at `max` squeezes more reasoning tokens out of the model. Opus defaults to `high`; bumping to `max` is worth the extra cost when you're already paying for the most capable model. Sonnet stays at `high` regardless of this setting.
+
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` enables [agent teams](https://code.claude.com/docs/en/agent-teams), an experimental coordination layer beyond regular subagents. Regular subagents spawn, do work, and report back to the caller. Agent teams go further: teammates get a shared task list and can message each other directly, which makes them better suited for tasks where parallel workers need to share findings or coordinate across layers of a codebase. The feature uses significantly more tokens than single-session work, but for complex multi-file tasks the coordination pays for itself.
 
 Notice the path difference. User-level hooks use absolute paths (`~/.claude/hooks/...`) and live in `~/.claude/settings.json`, applying to every project on the machine. That's where RTK rewriting, model governance, and LSP suggestions belong since they make sense everywhere. Project-level hooks use relative paths (`.claude/hooks/...`) and live in the repo's own `.claude/settings.json`. Pre-edit checks, auto-formatting, type-check gates, and session hooks go here because the specific rules change between codebases. A project using Convex blocks edits to `convex/_generated/`; a different project might block edits to `prisma/migrations/`.
 

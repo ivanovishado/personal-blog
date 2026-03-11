@@ -16,6 +16,11 @@
       "sourceType": "github",
       "computedHash": "9d1e82c5c409d2b0247245a005bc0f7e4447c0999b78dcea60f568c1ba4a6694"
     },
+    "mexican-spanish": {
+      "source": "ivanovishado/agent-skills",
+      "sourceType": "github",
+      "computedHash": "dbf9428d8dab9746baeb99b28fd701b0bde958e8c90aeb5cb6124a4c9beb3781"
+    },
     "programmatic-seo": {
       "source": "coreyhaines31/marketingskills",
       "sourceType": "github",
