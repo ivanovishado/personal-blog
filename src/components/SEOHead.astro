@@ -16,7 +16,7 @@ const {
   title,
   description,
   canonicalURL,
-  ogImage = '/og-default.png',
+  ogImage = '/og-default.jpg',
   lang = 'en',
   type = 'website',
   publishedTime,
@@ -26,7 +26,9 @@ const {
 } = Astro.props;
 
 const siteUrl = 'https://blog.ivanovishado.dev';
-const fullTitle = `${title} | Ivan Galaviz Blog`;
+const siteTitle = 'Ivan Galaviz Blog';
+const isHomepage = title === siteTitle || title === 'Blog de Ivan Galaviz';
+const fullTitle = isHomepage ? title : `${title} | ${siteTitle}`;
 const resolvedCanonical = canonicalURL ?? Astro.url.href;
 const resolvedOgImage = ogImage.startsWith('http') ? ogImage : `${siteUrl}${ogImage}`;
 const alternateLang = lang === 'en' ? 'es' : 'en';
