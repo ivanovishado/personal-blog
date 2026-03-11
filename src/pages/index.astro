@@ -1,3 +1,6 @@
 ---
-return Astro.redirect('/en/', 302);
 ---
+
+<meta http-equiv="refresh" content="0;url=/en/" />
+<link rel="canonical" href="/en/" />
+<script is:inline>window.location.replace('/en/');</script>
