@@ -32,6 +32,8 @@ export const ui = {
     'theme.system': 'System',
     'rss.title': 'Ivan Galaviz Blog',
     'rss.description': 'Thoughts on software engineering, maybe will add more topics later.',
+    'post.copyMarkdown': 'Copy as Markdown',
+    'post.copiedMarkdown': 'Copied!',
   },
   es: {
     'nav.home': 'Inicio',
@@ -63,6 +65,8 @@ export const ui = {
     'theme.system': 'Sistema',
     'rss.title': 'Blog de Ivan Galaviz',
     'rss.description': 'Reflexiones sobre ingeniería de software, quizás agregue más temas después.',
+    'post.copyMarkdown': 'Copiar como Markdown',
+    'post.copiedMarkdown': '¡Copiado!',
   },
 } as const;
 

@@ -1,4 +1,12 @@
 ---
+/*
+ * Icons: we use inline SVGs, NOT @phosphor-icons/web.
+ * That package is a CSS icon font (4600+ lines of CSS + web font download),
+ * not web components — the <ph-*> custom elements don't exist.
+ * For ~8 icons on a static site, inline SVGs are lighter and render instantly.
+ * See CopyCode.astro / CopyMarkdown.astro for the <template> + cloneNode()
+ * pattern used for JS-driven icon swaps.
+ */
 import SEOHead from '../components/SEOHead.astro';
 import Grain from '../components/Grain.astro';
 import ThemeToggle from '../components/ThemeToggle.astro';
@@ -41,6 +49,14 @@ const {
       }
     </script>
 
+    {/* Umami */}
+    <script
+      is:inline
+      defer
+      src="https://umami-pearl-mu.vercel.app/script.js"
+      data-website-id="ba17ed25-88a0-42ef-8fe8-6be75481e681"
+    ></script>
+
     {/* Font preconnects */}
     <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
@@ -63,6 +79,8 @@ const {
       lang={lang}
       canonicalURL={canonicalURL}
     />
+    <slot name="head" />
+
   </head>
 
   <body class="bg-void text-starlight min-h-screen font-prose antialiased">

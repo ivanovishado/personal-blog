@@ -3,6 +3,7 @@ import BaseLayout from './BaseLayout.astro';
 import TableOfContents from '../components/TableOfContents.astro';
 import ReadingProgress from '../components/ReadingProgress.astro';
 import LanguageSwitcher from '../components/LanguageSwitcher.astro';
+import CopyMarkdown from '../components/CopyMarkdown.astro';
 
 interface Heading {
   depth: number;
@@ -47,6 +48,10 @@ const {
   readingTime,
 } = frontmatter;
 
+const hasClaude = authors.some(a => a.startsWith('Claude'));
+const slug = Astro.url.pathname.replace(/\/$/, '');
+const mdUrl = `${slug}.md`;
+
 const formattedPubDate = new Intl.DateTimeFormat(lang === 'es' ? 'es-MX' : 'en-US', {
   year: 'numeric',
   month: 'long',
@@ -68,6 +73,12 @@ const formattedUpdatedDate = updatedDate
   ogImage={ogImage}
   lang={lang}
 >
+  {hasClaude && (
+    <Fragment slot="head">
+      <link rel="alternate" type="text/markdown" href={mdUrl} />
+    </Fragment>
+  )}
+
   {/* Top bar */}
   <header class="sticky top-0 z-40 border-b border-[var(--color-border)] bg-void/80 backdrop-blur-md">
     <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
@@ -134,6 +145,12 @@ const formattedUpdatedDate = updatedDate
             <>
               <span class="text-text-tertiary">·</span>
               <span>{readingTime}</span>
+            </>
+          )}
+          {hasClaude && (
+            <>
+              <span class="text-text-tertiary">·</span>
+              <CopyMarkdown mdUrl={mdUrl} lang={lang} />
             </>
           )}
         </div>
