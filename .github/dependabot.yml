@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # Node.js dependencies (npm)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
