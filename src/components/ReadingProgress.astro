@@ -268,5 +268,14 @@ const tocTitle = t('post.onThisPage');
     }, { signal });
   }
 
+  function cleanup() {
+    observer?.disconnect();
+    observer = null;
+    controller?.abort();
+    controller = null;
+  }
+
   init();
+  document.addEventListener('astro:after-swap', init);
+  document.addEventListener('astro:before-swap', cleanup);
 </script>
