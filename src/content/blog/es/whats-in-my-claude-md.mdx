@@ -1,0 +1,168 @@
+---
+title: "Qué Hay en Mi CLAUDE.md a Principios de 2026"
+description: "Un recorrido por mi setup de CLAUDE.md para Claude Code: un índice simple en AGENTS.md, 10 skills permanentes con carga dinámica, y la auditoría de contexto que le dio forma a todo."
+pubDate: 2026-03-30
+authors: ["Claude Opus 4.6", "Ivan Galaviz"]
+tags: ["claude-code", "ai-tooling", "context-optimization", "developer-experience"]
+lang: es
+translationSlug: "whats-in-my-claude-md"
+heroImage: "/whats-in-my-claude-md.webp"
+heroImageAlt: "Ilustración de un archivero desbordado con un cajón abierto, revelando una sola ficha con una lista ordenada en lugar de cientos de archivos"
+ogImage: "/whats-in-my-claude-md-og.jpg"
+tldr: "Mi CLAUDE.md es una línea: @AGENTS.md. El trabajo real está en mantener ese archivo eficiente, cargar skills dinámicamente, y no pagar por la misma información dos veces."
+---
+
+[Claude Code](https://claude.ai/code) es el agente de programación de Anthropic. Corre en tu terminal, lee tu código y usa herramientas para escribir en él, ejecutar comandos y manejar archivos. Lo configuras a través de un archivo `CLAUDE.md` en la raíz de tu proyecto, más uno opcional a nivel usuario en `~/.claude/CLAUDE.md`.
+
+En mi [post anterior](/es/deterministic-claude-code-setup/) recomendé RTK (Rust Token Killer) para comprimir la salida de comandos. Ya no lo recomiendo. RTK es una idea prometedora, pero la herramienta necesita más tiempo para madurar, y me topé con suficientes asperezas como para no sugerirle a otros que la adopten todavía. Lo voy a revisitar en seis meses.
+
+El CLAUDE.md de mi proyecto es una sola línea: `@AGENTS.md`. Esa directiva `@` le dice a Claude Code que cargue el contenido de AGENTS.md en el contexto de la sesión. Lo mantengo así a propósito. CLAUDE.md es el archivo de configuración de Claude Code. AGENTS.md es donde viven las instrucciones reales, y cualquier herramienta de IA puede leerlo. Si agrego otro framework de agentes después, las instrucciones no tienen que moverse. Y a cómo van las cosas, nunca sabes cuándo el desarrollo podría estar pasando completamente sin ti frente al teclado. ;) ;)
+
+Este post recorre lo que contiene ese AGENTS.md, cómo manejo mis skills, y lo que aprendí al auditar el contexto que se carga cuando Claude Code procesa mi primer mensaje en una sesión.
+
+## El Impuesto de Contexto
+
+Cada sesión de Claude Code carga un bloque de contexto cuando procesa tu primer mensaje. El system prompt base, tu CLAUDE.md (y todo lo que incluya con `@`), los skills instalados, los esquemas de herramientas, las definiciones de servidores MCP, el estado de git y la auto-memoria, todo se inyecta en ese prompt inicial. Mi proyecto estaba cargando aproximadamente 30,000 tokens antes de que Claude Code siquiera empezara a pensar en lo que le pedí.
+
+El desglose:
+
+| Fuente | Peso | Qué es |
+|--------|------|--------|
+| AGENTS.md (vía `@`) | ~40% | Resumen del proyecto, arquitectura, convenciones, tablas de skills, hooks, docs de MCP, troubleshooting |
+| Lista de skills | ~20% | Nombre + descripción de trigger por cada skill instalado |
+| System prompt base | ~15% | Instrucciones nativas de Claude Code para uso de herramientas, protocolos de git, lineamientos de código |
+| Esquemas de herramientas | ~10% | JSON schemas completos para las 9 herramientas built-in |
+| Herramientas diferidas + MCP | ~8% | Nombres de herramientas de servidores MCP, instrucciones de uso |
+| Estado de git + memoria | ~7% | Snapshot del estado del repo, índice de auto-memoria |
+
+AGENTS.md dominaba porque tenía 592 líneas. Cada detalle de arquitectura, cada entrada de troubleshooting, cada descripción de skill se incluía en todas las sesiones, las necesitaran o no.
+
+Las ventanas de contexto se están volviendo menos limitantes. Anthropic puso como modelo default de Claude Code a Opus con una ventana de contexto de 1M, disponible en el plan Max. Estoy en Max, así que quedarse sin espacio ya no es la preocupación inmediata que solía ser. Pero una ventana más grande no arregla que instrucciones irrelevantes diluyan las relevantes. Mantener el contexto limpio es cuestión de organización y calidad de señal, no solo de presupuestos de tokens.
+
+## El Índice de AGENTS.md
+
+Mi AGENTS.md ahora tiene 213 líneas. Conserva solo lo que cada sesión necesita: overview del proyecto, tech stack, mapa de directorios, convenciones de código, comandos de build, una tabla de referencia de archivos clave, quality gates y una definición de done. Cada uno de estos es algo que el agente debería saber sin importar si está escribiendo un feature, arreglando un bug o revisando código.
+
+Todo lo demás vive en `docs/agents/` y se lee bajo demanda cuando la tarea lo requiere:
+
+- `architecture.md` -- auth, pagos, KYC, patrones de email
+- `dev-setup.md` -- setup de ambiente, cuentas de prueba
+- `hooks.md` -- mapeo de evento de hook a script
+- `mcp-servers.md` -- uso de Context7, Prisma-Local, shadcn, Stitch
+- `subagent-delegation.md` -- carga de skills, cadenas de workflow
+- `troubleshooting.md` -- problemas comunes y soluciones
+- `maintenance.md` -- cómo actualizar AGENTS.md y los archivos de detalle
+
+Un agente trabajando en flujos de pago lee `architecture.md`. Un agente debuggeando una falla en tests lee `troubleshooting.md`. Un agente agregando un blog post no lee ninguno.
+
+Un índice solo sirve si se mantiene preciso. En otro proyecto uso dos hooks que trabajan en par para manejar esto. Un hook PostToolUse en Edit y Write registra cada ruta de archivo modificado en un archivo temporal:
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+if [ -n "$FILE_PATH" ] && [ -n "$CLAUDE_PROJECT_DIR" ]; then
+  REL_PATH="${FILE_PATH#$CLAUDE_PROJECT_DIR/}"
+  PROJ_HASH=$(echo "$CLAUDE_PROJECT_DIR" | md5 -q 2>/dev/null \
+    || echo "$CLAUDE_PROJECT_DIR" | md5sum 2>/dev/null | cut -c1-8)
+  echo "$REL_PATH" >> "/tmp/claude-modified-${PROJ_HASH}-${PPID}.txt"
+fi
+exit 0
+```
+
+El `$PPID` en el nombre del archivo evita que sesiones paralelas escriban en el archivo de tracking de la otra. Luego un hook de Stop (también conectado a SubagentStop para `fullstack-developer`, `test-writer`, `test-debugger` y `code-reviewer`) verifica si alguno de esos archivos hace match con patrones estructurales:
+
+```bash
+#!/bin/bash
+INPUT=$(cat)
+
+STOP_HOOK_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)
+if [ "$STOP_HOOK_ACTIVE" = "true" ]; then exit 0; fi
+
+PROJ_HASH=$(echo "$CLAUDE_PROJECT_DIR" | md5 -q 2>/dev/null \
+  || echo "$CLAUDE_PROJECT_DIR" | md5sum 2>/dev/null | cut -c1-8)
+TRACKING_PATTERN="/tmp/claude-modified-${PROJ_HASH}-*.txt"
+
+HAS_FILES=false
+for f in $TRACKING_PATTERN; do
+  [ -f "$f" ] && HAS_FILES=true && break
+done
+if [ "$HAS_FILES" = "false" ]; then exit 0; fi
+
+FOUND_STRUCTURAL=false
+for f in $TRACKING_PATTERN; do
+  [ -f "$f" ] || continue
+  if grep -qE '(\.claude/(hooks|settings|agents|skills)/|package\.json|prisma/schema|tsconfig|eslint\.config|Makefile|docker-compose|scripts/|src/lib/|src/app/api/)' "$f"; then
+    FOUND_STRUCTURAL=true
+  fi
+  rm -f "$f"
+done
+
+if [ "$FOUND_STRUCTURAL" = "true" ]; then
+  echo "You modified project-structural files. Check if AGENTS.md needs updating." >&2
+  exit 2
+fi
+
+exit 0
+```
+
+Si algún agente edita `package.json`, un schema de Prisma, un script de hook, o cualquier cosa bajo `src/lib/` o `src/app/api/`, el agente no puede marcar su tarea como terminada hasta que verifique si AGENTS.md refleja el cambio. El patrón del grep es la parte que personalizarías para la estructura de tu propio proyecto.
+
+El win individual más grande fue quitar dos secciones que nunca debieron estar en el archivo siempre en contexto: la Skill Intent Table (65 líneas) y Skills by Category (95 líneas). Ambas listaban el nombre, propósito y condiciones de trigger de cada skill. Claude Code ya inyecta exactamente esta información en el system prompt por cada skill instalado. Estaba pagando por los mismos datos dos veces -- 160 líneas de contexto que duplicaban lo que el sistema ya proporcionaba.
+
+## Diez Skills Permanentes
+
+Tenía 57 skills a nivel proyecto instalados. Cada skill agrega su nombre y descripción de trigger al system prompt, aproximadamente 50 tokens por skill. Eso son cerca de 2,800 tokens solo en la lista de skills, cargados en cada sesión. La mayoría de esos skills (marketing, SEO, CRO, variantes secundarias de auth/prisma) se usaban en menos del 5% de las sesiones.
+
+Lo reduje a 10 instalaciones permanentes:
+
+`better-auth-best-practices`, `copywriting`, `design-taste-frontend`, `find-skills`, `javascript-testing-patterns`, `next-best-practices`, `prisma-cli`, `prisma-client-api`, `shadcn`, `vercel-react-best-practices`
+
+Todo lo demás se carga bajo demanda. Instalo todos los skills de mi repo a través de `npx skills` ([la CLI de Skills de Vercel](https://github.com/vercel-labs/skills)), así que el workflow dinámico se ve así:
+
+1. El agente revisa qué skills están instalados actualmente.
+2. Si la tarea necesita un skill que no está en el set permanente, usa `find-skills` para descubrir uno.
+3. Lo instala a nivel proyecto con `npx skills add <owner/repo> -s <skill> -a claude-code -y` (nunca global).
+4. Registra la instalación en `.agents/dynamic-skills.md`, un archivo de coordinación que trackea qué skills están activos y qué sesión los instaló.
+5. Un hook de `SessionEnd` remueve cualquier skill que no esté en la lista base.
+
+Primero intenté con `Stop` para la limpieza, pero `Stop` se dispara después de cada respuesta del modelo. Un skill instalado a mitad de sesión se removería después de la mismísima siguiente respuesta, antes de que el agente terminara de usarlo. `SessionEnd` se dispara una sola vez, cuando la conversación realmente termina, y solo para la sesión principal, no para subagentes. El hook compara los skills instalados contra la lista base y remueve los extras, saltándose cualquier skill que otra sesión paralela activa haya registrado en el archivo de coordinación.
+
+La estructura de archivos:
+
+- `.agents/skills/` -- source of truth para todos los archivos de skills
+- `.claude/skills/` -- symlinks apuntando a `.agents/skills/`
+- `.agents/dynamic-skills.md` -- lista base más tabla de skills dinámicos activos
+
+El enfoque de symlinks significa que Claude Code lee desde su directorio esperado `.claude/skills/`, pero los archivos reales viven bajo `.agents/` donde están versionados y accesibles para cualquier herramienta.
+
+Hay un tradeoff con este enfoque: los skills instalados de esta manera son estáticos. Si el skill original se actualiza, tu copia local se queda desactualizada hasta que lo reinstales. Los plugins de Claude Code resuelven dicho problema porque actualizan desde el origen en cada sesión, pero cada plugin agrega sus propios skills y outputs de hooks al system prompt. Tengo seis plugins activos (`explanatory-output-style`, `hookify`, `skill-creator`, `claude-code-setup`, `claude-md-management`, `typescript-lsp`), cada uno agregando unos cientos de tokens. Seis plugins juntos rivalizan con una sección mediana de AGENTS.md en costo de contexto. Así que estás intercambiando riesgo de desactualización por inflación de contexto, o viceversa. Yo uso skills para conocimiento de dominio que cambia lento y plugins para tooling que quiero siempre al día. Si tienes plugins que no has tocado en semanas, vale la pena auditarlos.
+
+## CLAUDE.md a Nivel Usuario
+
+También tengo un CLAUDE.md a nivel usuario en `~/.claude/CLAUDE.md` que aplica a cada proyecto en mi máquina:
+
+```
+- NEVER assume anything. When faced with ambiguity, prefer to ask the user,
+  in case you cannot solve the question via Web Search or docs retrieval.
+- When launching Explore (not coding) agents, do a 'hybrid search'.
+  Start exploring with Haiku, then if you need to understand deeper,
+  explore with Sonnet. Overall, your Explore Philosophy should be
+  'Haiku for searching, Sonnet for understanding' before creating a Plan.
+- When launching Plan and coding agents, you MUST use the `opus` model.
+- For non-trivial development tasks, delegate to the following subagents:
+  * `fullstack-developer`: General coding
+  * `test-writer`: For writing tests
+  * `test-debugger`: To fix failing tests
+  * `code-reviewer`: To review changes
+- Combine agents when a task spans specialties (e.g., implement a feature
+  with `fullstack-developer`, then review it with `code-reviewer`).
+```
+
+Esto maneja el ruteo de modelos (Haiku para búsqueda, Sonnet para comprensión, Opus para código) y las reglas de delegación a subagentes. Son preferencias que aplican en todos lados, así que viven a nivel usuario en vez de repetirse en el AGENTS.md de cada proyecto.
+
+## Qué Revisaría en Tu Setup
+
+- Abre tu CLAUDE.md y mira lo que incluye con `@`. Si tienes un archivo de instrucciones monolítico, mídelo. Cada línea en un archivo incluido con `@` es una línea en el contexto de cada sesión. El patrón de índice (archivo siempre cargado en memoria con apuntadores a archivos de detalle que se leen bajo demanda) aplica a instrucciones de agentes de la misma forma que el lazy loading aplica a assets web: paga el costo cuando lo necesites, no por adelantado.
+- Cuenta tus skills instalados. Corre `npx skills list` y fíjate cuántos usas regularmente versus cuántos están ahí nomás agregándose al prompt de cada sesión. Si tienes más de 15-20 y no estás usando la mayoría en la mayoría de las sesiones, el enfoque de carga dinámica vale el costo de setup.
+- Revisa lo que el sistema ya sabe. Claude Code inyecta automáticamente el nombre y descripción de trigger de cada skill instalado en el system prompt. Si tu CLAUDE.md también describe esos skills, eso es contexto duplicado que el modelo tiene que parsear dos veces sin beneficio alguno. El mismo principio aplica a documentación de hooks que repite lo que ya está en `settings.json`.

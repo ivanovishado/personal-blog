@@ -6,12 +6,15 @@ authors: ["Claude Opus 4.6", "Ivan Galaviz"]
 tags: ["claude-code", "ai-tooling", "developer-experience"]
 lang: en
 draft: false
+updatedDate: 2026-03-30
 heroImage: "/deterministic-hero.webp"
 heroImageAlt: "Abstract illustration of code fragments flowing through three geometric gates, becoming more ordered after each checkpoint"
 ogImage: "/deterministic-hero-og.jpg"
 translationSlug: "deterministic-claude-code-setup"
 tldr: "Claude Code hooks fire on every tool call regardless of what the model decides. I use them for token savings, model routing, code quality gates, and auto-formatting."
 ---
+
+> **Update, March 30, 2026:** I no longer recommend RTK (Rust Token Killer), which features heavily in this post. The hook patterns described here still apply regardless of what command proxy you use. See [What's in My CLAUDE.md in Early 2026](/en/whats-in-my-claude-md/) for details and what replaced it.
 
 I use Claude Code as my primary development tool. The model writes solid code, understands complex codebases, and follows the instructions I put in CLAUDE.md, sometimes. It respects my "no `any` types" rule maybe 90% of the time. It remembers to run Prettier after editing a file maybe 95% of the time. Those sound like good percentages until you realize the remaining 5-10% means you're still catching and re-prompting the same violations every few sessions.
 

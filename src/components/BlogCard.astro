@@ -17,6 +17,7 @@ const formattedDate = new Intl.DateTimeFormat(lang === 'es' ? 'es-MX' : 'en-US',
   year: 'numeric',
   month: 'long',
   day: 'numeric',
+  timeZone: 'UTC',
 }).format(pubDate);
 
 const href = `/${lang}/${slug}/`;

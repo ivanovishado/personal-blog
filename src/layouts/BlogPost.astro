@@ -56,6 +56,7 @@ const formattedPubDate = new Intl.DateTimeFormat(lang === 'es' ? 'es-MX' : 'en-U
   year: 'numeric',
   month: 'long',
   day: 'numeric',
+  timeZone: 'UTC',
 }).format(new Date(pubDate));
 
 const formattedUpdatedDate = updatedDate
@@ -63,6 +64,7 @@ const formattedUpdatedDate = updatedDate
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'UTC',
     }).format(new Date(updatedDate))
   : null;
 ---
@@ -196,16 +198,12 @@ const formattedUpdatedDate = updatedDate
           {lang === 'en' ? (
             <p>
               Este artículo también está disponible en{' '}
-              <a href={`/es/${translationSlug}/`} class="text-event-horizon hover:underline">
-                Español
-              </a>.
+              <a href={`/es/${translationSlug}/`} class="text-event-horizon hover:underline">Español</a>.
             </p>
           ) : (
             <p>
               This article is also available in{' '}
-              <a href={`/en/${translationSlug}/`} class="text-event-horizon hover:underline">
-                English
-              </a>.
+              <a href={`/en/${translationSlug}/`} class="text-event-horizon hover:underline">English</a>.
             </p>
           )}
         </div>
