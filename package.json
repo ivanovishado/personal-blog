@@ -20,6 +20,6 @@
     "tailwindcss": "4.3.0"
   },
   "devDependencies": {
-    "vitest": "4.1.6"
+    "vitest": "4.1.7"
   }
 }
