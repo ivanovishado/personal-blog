@@ -10,11 +10,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@astrojs/mdx": "7.0.8",
+    "@astrojs/mdx": "8.0.0",
     "@astrojs/rss": "4.0.19",
-    "@astrojs/sitemap": "3.7.3",
+    "@astrojs/sitemap": "3.7.4",
     "@tailwindcss/vite": "4.3.3",
-    "astro": "7.2.9",
+    "astro": "7.2.10",
     "reading-time": "1.5.0",
     "sharp": "0.35.4",
     "tailwindcss": "4.3.3"
