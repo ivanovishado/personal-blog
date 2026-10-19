@@ -20,6 +20,8 @@ interface Props {
   ogImage?: string;
   lang?: string;
   canonicalURL?: string;
+  translationPath?: string;
+  noindex?: boolean;
 }
 
 const {
@@ -28,6 +30,8 @@ const {
   ogImage,
   lang = 'en',
   canonicalURL,
+  translationPath,
+  noindex,
 } = Astro.props;
 ---
 
@@ -78,6 +82,8 @@ const {
       ogImage={ogImage}
       lang={lang}
       canonicalURL={canonicalURL}
+      translationPath={translationPath}
+      noindex={noindex}
     />
     <slot name="head" />
 

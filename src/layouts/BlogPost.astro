@@ -74,6 +74,7 @@ const formattedUpdatedDate = updatedDate
   description={description}
   ogImage={ogImage}
   lang={lang}
+  translationPath={translationSlug ? `/${lang === 'en' ? 'es' : 'en'}/${translationSlug}/` : undefined}
 >
   {hasClaude && (
     <Fragment slot="head">

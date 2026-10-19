@@ -21,7 +21,15 @@ export default defineConfig({
       prefixDefaultLocale: true,
     },
   },
-  integrations: [mdx(), sitemap()],
+  integrations: [
+    mdx(),
+    sitemap({
+      // Only list posts and the language indexes. The root redirects to /en/
+      // and tag pages are noindex.
+      filter: (page) =>
+        page !== 'https://blog.ivanovishado.dev/' && !page.includes('/tags/'),
+    }),
+  ],
   vite: {
     plugins: [tailwindcss()],
   },

@@ -10,6 +10,9 @@ interface Props {
   modifiedTime?: string;
   tags?: string[];
   authors?: string[];
+  /** Path of the other-language version, e.g. "/es/my-post/". Omit when none exists. */
+  translationPath?: string;
+  noindex?: boolean;
 }
 
 const {
@@ -23,6 +26,8 @@ const {
   modifiedTime,
   tags = [],
   authors = ['Ivan Galaviz'],
+  translationPath,
+  noindex = false,
 } = Astro.props;
 
 const siteUrl = 'https://blog.ivanovishado.dev';
@@ -31,15 +36,13 @@ const isHomepage = title === siteTitle || title === 'Blog de Ivan Galaviz';
 const fullTitle = isHomepage ? title : `${title} | ${siteTitle}`;
 const resolvedCanonical = canonicalURL ?? Astro.url.href;
 const resolvedOgImage = ogImage.startsWith('http') ? ogImage : `${siteUrl}${ogImage}`;
-const alternateLang = lang === 'en' ? 'es' : 'en';
 const ogLocale = lang === 'en' ? 'en_US' : 'es_MX';
 
-// Build alternate URL by swapping locale prefix
-const currentPath = Astro.url.pathname;
-const alternateUrl = currentPath.replace(
-  new RegExp(`^/${lang}/`),
-  `/${alternateLang}/`,
-);
+// Hreflang pairs only when a translation exists and the page is indexable
+const currentUrl = `${siteUrl}${Astro.url.pathname}`;
+const translationUrl = translationPath && !noindex ? `${siteUrl}${translationPath}` : null;
+const enUrl = lang === 'en' ? currentUrl : translationUrl;
+const esUrl = lang === 'es' ? currentUrl : translationUrl;
 
 // JSON-LD: BlogPosting (only for articles)
 const blogPostingSchema = type === 'article'
@@ -98,6 +101,7 @@ const breadcrumbSchema = JSON.stringify({
 <title>{fullTitle}</title>
 <meta name="description" content={description} />
 <link rel="canonical" href={resolvedCanonical} />
+{noindex && <meta name="robots" content="noindex, follow" />}
 
 {/* Google Search Console */}
 <meta name="google-site-verification" content="TLmX5S2mQjoqW4TzBzEn6QtUxsstvwyrZtv6UxGQPE8" />
@@ -128,9 +132,13 @@ const breadcrumbSchema = JSON.stringify({
 <meta name="twitter:image" content={resolvedOgImage} />
 
 {/* Hreflang alternates */}
-<link rel="alternate" hreflang="en" href={`${siteUrl}${lang === 'en' ? currentPath : alternateUrl}`} />
-<link rel="alternate" hreflang="es" href={`${siteUrl}${lang === 'es' ? currentPath : alternateUrl}`} />
-<link rel="alternate" hreflang="x-default" href={`${siteUrl}${lang === 'en' ? currentPath : alternateUrl}`} />
+{translationUrl && (
+  <>
+    <link rel="alternate" hreflang="en" href={enUrl} />
+    <link rel="alternate" hreflang="es" href={esUrl} />
+    <link rel="alternate" hreflang="x-default" href={enUrl} />
+  </>
+)}
 
 {/* JSON-LD structured data */}
 {blogPostingSchema && (
