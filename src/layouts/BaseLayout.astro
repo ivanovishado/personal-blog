@@ -22,6 +22,11 @@ interface Props {
   canonicalURL?: string;
   translationPath?: string;
   noindex?: boolean;
+  type?: 'website' | 'article';
+  publishedTime?: string;
+  modifiedTime?: string;
+  tags?: string[];
+  authors?: string[];
 }
 
 const {
@@ -32,6 +37,11 @@ const {
   canonicalURL,
   translationPath,
   noindex,
+  type,
+  publishedTime,
+  modifiedTime,
+  tags,
+  authors,
 } = Astro.props;
 ---
 
@@ -84,6 +94,11 @@ const {
       canonicalURL={canonicalURL}
       translationPath={translationPath}
       noindex={noindex}
+      type={type}
+      publishedTime={publishedTime}
+      modifiedTime={modifiedTime}
+      tags={tags}
+      authors={authors}
     />
     <slot name="head" />
 

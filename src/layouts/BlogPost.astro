@@ -75,6 +75,11 @@ const formattedUpdatedDate = updatedDate
   ogImage={ogImage}
   lang={lang}
   translationPath={translationSlug ? `/${lang === 'en' ? 'es' : 'en'}/${translationSlug}/` : undefined}
+  type="article"
+  publishedTime={new Date(pubDate).toISOString()}
+  modifiedTime={updatedDate ? new Date(updatedDate).toISOString() : undefined}
+  tags={tags}
+  authors={authors}
 >
   {hasClaude && (
     <Fragment slot="head">
